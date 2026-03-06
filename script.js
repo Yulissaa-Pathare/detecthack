@@ -1,17 +1,38 @@
-async function analyzeVideo() {
+const uploadForm = document.getElementById("uploadForm");
+const fileInput = document.getElementById("fileInput");
+const resultDiv = document.getElementById("result");
 
-    const fileInput = document.getElementById("videoUpload");
+uploadForm.addEventListener("submit", async function (e) {
+    e.preventDefault();
+
     const file = fileInput.files[0];
+
+    if (!file) {
+        alert("Please upload a video or image.");
+        return;
+    }
 
     const formData = new FormData();
     formData.append("file", file);
 
-    const response = await fetch("http://127.0.0.1:8000/analyze", {
-        method: "POST",
-        body: formData
-    });
+    resultDiv.innerHTML = "Analyzing...";
 
-    const data = await response.json();
+    try {
+        const response = await fetch("https://detecthack-api.onrender.com/analyze", {
+            method: "POST",
+            body: formData
+        });
 
-    console.log(data);
-}
+        const data = await response.json();
+
+        if (data.result) {
+            resultDiv.innerHTML = `Result: ${data.result}`;
+        } else {
+            resultDiv.innerHTML = "No result returned.";
+        }
+
+    } catch (error) {
+        console.error(error);
+        resultDiv.innerHTML = "Error analyzing file.";
+    }
+});
