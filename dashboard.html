@@ -1,0 +1,1300 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DetectHack — DeepFake Analysis</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root[data-theme="dark"] {
+    --bg: #050a0f;
+    --bg2: #090e15;
+    --bg3: #0d1520;
+    --surface: #0f1c2a;
+    --surface2: #162333;
+    --border: #1e3145;
+    --border2: #0e4d6e44;
+    --accent: #00c8ff;
+    --accent2: #00ff9d;
+    --accent3: #ff3c6e;
+    --text: #e8f4ff;
+    --text2: #7fa8c4;
+    --text3: #3d6880;
+    --header-bg: #020507;
+    --glow: 0 0 20px #00c8ff33;
+    --glow2: 0 0 30px #00ff9d22;
+  }
+  :root[data-theme="light"] {
+    --bg: #f0f5fa;
+    --bg2: #e8eef5;
+    --bg3: #dde5ef;
+    --surface: #ffffff;
+    --surface2: #f5f8fc;
+    --border: #c8d8e8;
+    --border2: #a0b8d033;
+    --accent: #0088bb;
+    --accent2: #00a860;
+    --accent3: #e02050;
+    --text: #0d1e2e;
+    --text2: #3a5a78;
+    --text3: #6888a8;
+    --header-bg: #060e18;
+    --glow: 0 0 20px #0088bb22;
+    --glow2: 0 0 30px #00a86018;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Syne', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+    transition: background 0.3s, color 0.3s;
+  }
+
+  /* ── SCANLINE OVERLAY ── */
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,200,255,0.012) 2px, rgba(0,200,255,0.012) 4px);
+    pointer-events: none; z-index: 9999;
+  }
+
+  /* ── HEADER ── */
+  header {
+    background: var(--header-bg);
+    border-bottom: 1px solid var(--border);
+    height: 58px;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 24px;
+    position: sticky; top: 0; z-index: 100;
+    box-shadow: 0 1px 0 var(--border), 0 4px 30px rgba(0,0,0,0.5);
+  }
+
+  .logo-group {
+    display: flex; align-items: center; gap: 11px;
+  }
+
+  .logo-icon {
+    width: 34px; height: 34px;
+    position: relative;
+  }
+  .logo-icon svg { width: 100%; height: 100%; }
+
+  .logo-text {
+    font-family: 'Syne', sans-serif;
+    font-weight: 800;
+    font-size: 20px;
+    letter-spacing: -0.3px;
+    color: #fff;
+  }
+  .logo-text span { color: var(--accent); }
+
+  .header-right {
+    display: flex; align-items: center; gap: 14px;
+  }
+
+  .badge-live {
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    color: var(--accent2);
+    border: 1px solid var(--accent2);
+    padding: 2px 8px; border-radius: 2px;
+    letter-spacing: 1px;
+    animation: pulse-badge 2s infinite;
+  }
+  @keyframes pulse-badge {
+    0%,100% { opacity:1; } 50% { opacity:0.5; }
+  }
+
+  .btn-account {
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    background: var(--surface2);
+    border: 1.5px solid var(--border);
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    position: relative;
+    overflow: hidden;
+  }
+  .btn-account:hover {
+    border-color: var(--accent);
+    box-shadow: var(--glow);
+  }
+  .btn-account svg { color: var(--text2); width: 18px; height: 18px; }
+
+  /* ── MAIN LAYOUT ── */
+  .main {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 1fr 1fr;
+    gap: 14px;
+    padding: 14px;
+    height: calc(100vh - 58px);
+    min-height: 600px;
+  }
+
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    position: relative;
+    transition: background 0.3s, border-color 0.3s;
+  }
+
+  .panel::before {
+    content: '';
+    position: absolute; top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    opacity: 0.4;
+  }
+
+  /* Section 1 — Upload (spans 2 rows on left) */
+  .panel-upload {
+    grid-column: 1;
+    grid-row: 1 / 3;
+  }
+  .panel-upload::before {
+    background: linear-gradient(90deg, transparent, var(--accent), var(--accent2), transparent);
+    opacity: 0.5;
+  }
+
+  /* Section 2 — Reports (top right) */
+  .panel-reports { grid-column: 2; grid-row: 1; }
+
+  /* Section 3 — Analytics (bottom right) */
+  .panel-analytics { grid-column: 2; grid-row: 2; }
+
+  .panel-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 18px 12px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg2);
+  }
+  .panel-title {
+    font-size: 11px;
+    font-family: 'Space Mono', monospace;
+    color: var(--text3);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .panel-title .dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 6px var(--accent);
+  }
+  .panel-title .dot.green { background: var(--accent2); box-shadow: 0 0 6px var(--accent2); }
+  .panel-title .dot.red { background: var(--accent3); box-shadow: 0 0 6px var(--accent3); }
+
+  .panel-body { padding: 18px; height: calc(100% - 49px); overflow-y: auto; }
+  .panel-body::-webkit-scrollbar { width: 4px; }
+  .panel-body::-webkit-scrollbar-track { background: transparent; }
+  .panel-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  /* ── UPLOAD ZONE ── */
+  .upload-zone {
+    border: 1.5px dashed var(--border);
+    border-radius: 6px;
+    height: 240px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 14px;
+    cursor: pointer;
+    transition: border-color 0.3s, background 0.3s;
+    position: relative;
+    overflow: hidden;
+    background: var(--bg3);
+  }
+  .upload-zone:hover, .upload-zone.drag-over {
+    border-color: var(--accent);
+    background: rgba(0,200,255,0.04);
+    box-shadow: inset 0 0 30px rgba(0,200,255,0.05);
+  }
+  .upload-zone input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+
+  .upload-icon {
+    width: 56px; height: 56px;
+    border-radius: 50%;
+    border: 1.5px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    background: var(--surface2);
+    transition: border-color 0.3s, box-shadow 0.3s;
+  }
+  .upload-zone:hover .upload-icon {
+    border-color: var(--accent);
+    box-shadow: var(--glow);
+  }
+  .upload-icon svg { width: 24px; height: 24px; color: var(--accent); }
+
+  .upload-label {
+    text-align: center;
+  }
+  .upload-label p { font-size: 14px; font-weight: 700; color: var(--text); margin-bottom: 4px; }
+  .upload-label span { font-size: 11px; color: var(--text3); font-family: 'Space Mono', monospace; }
+
+  .file-types {
+    display: flex; gap: 6px; flex-wrap: wrap; justify-content: center;
+  }
+  .file-type-tag {
+    font-size: 10px;
+    font-family: 'Space Mono', monospace;
+    padding: 2px 7px;
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    color: var(--text3);
+    background: var(--bg);
+  }
+
+  /* Analysis options */
+  .analysis-options {
+    margin-top: 16px;
+  }
+  .option-title {
+    font-size: 10px;
+    font-family: 'Space Mono', monospace;
+    color: var(--text3);
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+  .options-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .option-card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 10px 12px;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+    display: flex; align-items: flex-start; gap: 10px;
+  }
+  .option-card:hover, .option-card.active {
+    border-color: var(--accent);
+    background: rgba(0,200,255,0.05);
+  }
+  .option-card.active .option-check {
+    background: var(--accent);
+    border-color: var(--accent);
+  }
+  .option-check {
+    width: 14px; height: 14px; border-radius: 2px;
+    border: 1.5px solid var(--border);
+    margin-top: 1px; flex-shrink: 0;
+    transition: background 0.2s;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .option-check svg { width: 9px; height: 9px; color: #000; display: none; }
+  .option-card.active .option-check svg { display: block; }
+  .option-info p { font-size: 12px; font-weight: 700; color: var(--text); }
+  .option-info span { font-size: 10px; color: var(--text3); font-family: 'Space Mono', monospace; }
+
+  .btn-analyze {
+    margin-top: 16px;
+    width: 100%;
+    background: var(--accent);
+    color: #000;
+    border: none;
+    border-radius: 5px;
+    padding: 13px;
+    font-family: 'Syne', sans-serif;
+    font-size: 13px;
+    font-weight: 800;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: box-shadow 0.2s, transform 0.1s;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+  }
+  .btn-analyze:hover {
+    box-shadow: 0 0 25px rgba(0,200,255,0.5);
+    transform: translateY(-1px);
+  }
+  .btn-analyze:active { transform: translateY(0); }
+  .btn-analyze svg { width: 16px; height: 16px; }
+
+  /* Sample preview */
+  .preview-area {
+    margin-top: 16px;
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 12px;
+    display: none;
+  }
+  .preview-area.show { display: block; }
+  .preview-file {
+    display: flex; align-items: center; gap: 10px;
+  }
+  .preview-thumb {
+    width: 48px; height: 48px;
+    border-radius: 4px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+    overflow: hidden;
+  }
+  .preview-thumb img { width: 100%; height: 100%; object-fit: cover; }
+  .preview-thumb svg { width: 22px; height: 22px; color: var(--text3); }
+  .preview-info { flex: 1; min-width: 0; }
+  .preview-info p { font-size: 12px; font-weight: 700; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .preview-info span { font-size: 10px; color: var(--text3); font-family: 'Space Mono', monospace; }
+  .btn-remove {
+    background: none; border: none; cursor: pointer; color: var(--accent3);
+    padding: 4px; border-radius: 3px;
+    transition: background 0.2s;
+  }
+  .btn-remove:hover { background: rgba(255,60,110,0.1); }
+  .btn-remove svg { width: 14px; height: 14px; display: block; }
+
+  /* Progress bar */
+  .progress-wrap {
+    margin-top: 14px; display: none;
+  }
+  .progress-wrap.show { display: block; }
+  .progress-label {
+    display: flex; justify-content: space-between; margin-bottom: 6px;
+  }
+  .progress-label span {
+    font-size: 10px; font-family: 'Space Mono', monospace; color: var(--text3);
+  }
+  .progress-bar {
+    height: 3px; background: var(--border); border-radius: 2px; overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%; width: 0%;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    border-radius: 2px;
+    transition: width 0.4s ease;
+    box-shadow: 0 0 8px var(--accent);
+  }
+
+  /* ── REPORTS SECTION ── */
+  .report-list { display: flex; flex-direction: column; gap: 8px; }
+
+  .report-card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 10px 12px;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .report-card:hover {
+    border-color: var(--accent);
+    background: rgba(0,200,255,0.03);
+  }
+
+  .report-verdict {
+    width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+  }
+  .verdict-fake { background: var(--accent3); box-shadow: 0 0 6px var(--accent3); }
+  .verdict-real { background: var(--accent2); box-shadow: 0 0 6px var(--accent2); }
+  .verdict-unsure {
+    background: #ffb800; box-shadow: 0 0 6px #ffb800;
+  }
+
+  .report-info { flex: 1; min-width: 0; }
+  .report-info p { font-size: 12px; font-weight: 700; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .report-info span { font-size: 10px; color: var(--text3); font-family: 'Space Mono', monospace; }
+
+  .report-score {
+    font-family: 'Space Mono', monospace;
+    font-size: 12px;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+  .score-high { color: var(--accent3); }
+  .score-mid { color: #ffb800; }
+  .score-low { color: var(--accent2); }
+
+  .report-badge {
+    font-size: 9px;
+    font-family: 'Space Mono', monospace;
+    padding: 2px 6px;
+    border-radius: 2px;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+  .badge-fake { background: rgba(255,60,110,0.15); color: var(--accent3); border: 1px solid rgba(255,60,110,0.3); }
+  .badge-real { background: rgba(0,255,157,0.1); color: var(--accent2); border: 1px solid rgba(0,255,157,0.3); }
+  .badge-unsure { background: rgba(255,184,0,0.1); color: #ffb800; border: 1px solid rgba(255,184,0,0.3); }
+
+  /* ── ANALYTICS SECTION ── */
+  .analytics-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+  .stat-card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 10px 12px;
+    text-align: center;
+  }
+  .stat-num {
+    font-family: 'Space Mono', monospace;
+    font-size: 22px;
+    font-weight: 700;
+    line-height: 1;
+    margin-bottom: 4px;
+  }
+  .stat-num.red { color: var(--accent3); }
+  .stat-num.green { color: var(--accent2); }
+  .stat-num.blue { color: var(--accent); }
+  .stat-label { font-size: 9px; color: var(--text3); font-family: 'Space Mono', monospace; letter-spacing: 1px; text-transform: uppercase; }
+
+  /* Chart */
+  .chart-wrap {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 10px 12px;
+    margin-bottom: 8px;
+  }
+  .chart-title {
+    font-size: 10px; font-family: 'Space Mono', monospace; color: var(--text3);
+    margin-bottom: 10px; letter-spacing: 1px; text-transform: uppercase;
+  }
+
+  canvas { width: 100% !important; }
+
+  .mini-charts {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .mini-chart-wrap {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 10px 12px;
+  }
+  .mini-chart-title {
+    font-size: 9px; font-family: 'Space Mono', monospace; color: var(--text3);
+    margin-bottom: 8px; letter-spacing: 1px; text-transform: uppercase;
+  }
+
+  /* ── ACCOUNT PANEL ── */
+  .account-overlay {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.7);
+    z-index: 200;
+    display: none;
+    backdrop-filter: blur(4px);
+    animation: fadeIn 0.2s ease;
+  }
+  .account-overlay.show { display: block; }
+
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+
+  .account-panel {
+    position: absolute;
+    top: 0; right: 0; bottom: 0;
+    width: 360px;
+    background: var(--bg2);
+    border-left: 1px solid var(--border);
+    overflow-y: auto;
+    animation: slideIn 0.25s ease;
+  }
+  .account-panel::-webkit-scrollbar { width: 3px; }
+  .account-panel::-webkit-scrollbar-thumb { background: var(--border); }
+
+  .account-header {
+    padding: 22px 22px 18px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg3);
+    display: flex; align-items: flex-start; justify-content: space-between;
+  }
+  .account-avatar {
+    width: 54px; height: 54px; border-radius: 50%;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px; font-weight: 800; color: #000;
+    flex-shrink: 0;
+    box-shadow: 0 0 20px rgba(0,200,255,0.3);
+  }
+  .account-name { font-size: 16px; font-weight: 800; color: var(--text); margin-bottom: 2px; }
+  .account-email { font-size: 11px; color: var(--text3); font-family: 'Space Mono', monospace; }
+  .account-plan {
+    display: inline-block;
+    margin-top: 8px;
+    font-size: 9px;
+    font-family: 'Space Mono', monospace;
+    padding: 2px 8px;
+    background: rgba(0,200,255,0.1);
+    border: 1px solid var(--accent);
+    border-radius: 2px;
+    color: var(--accent);
+    letter-spacing: 1px;
+  }
+  .btn-close-panel {
+    background: none; border: none; cursor: pointer;
+    color: var(--text3); padding: 4px;
+    transition: color 0.2s;
+  }
+  .btn-close-panel:hover { color: var(--text); }
+  .btn-close-panel svg { width: 18px; height: 18px; display: block; }
+
+  .account-section {
+    padding: 18px 22px;
+    border-bottom: 1px solid var(--border);
+  }
+  .account-section-title {
+    font-size: 9px; font-family: 'Space Mono', monospace;
+    color: var(--text3); letter-spacing: 2px; text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+
+  .setting-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 0;
+  }
+  .setting-info p { font-size: 13px; font-weight: 600; color: var(--text); }
+  .setting-info span { font-size: 11px; color: var(--text3); font-family: 'Space Mono', monospace; }
+
+  /* Toggle */
+  .toggle {
+    width: 38px; height: 22px;
+    background: var(--border);
+    border-radius: 11px;
+    position: relative;
+    cursor: pointer;
+    transition: background 0.3s;
+    border: none;
+    flex-shrink: 0;
+  }
+  .toggle.on { background: var(--accent); }
+  .toggle::after {
+    content: '';
+    position: absolute;
+    top: 3px; left: 3px;
+    width: 16px; height: 16px;
+    background: #fff;
+    border-radius: 50%;
+    transition: transform 0.3s;
+  }
+  .toggle.on::after { transform: translateX(16px); }
+
+  /* Theme toggle special */
+  .theme-toggle-row {
+    display: flex; align-items: center; gap: 10px;
+  }
+  .theme-label { font-size: 13px; font-weight: 600; color: var(--text); }
+
+  /* History */
+  .history-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 9px 0;
+    border-bottom: 1px solid var(--border2);
+    cursor: pointer;
+  }
+  .history-item:last-child { border-bottom: none; }
+  .history-thumb {
+    width: 36px; height: 36px; border-radius: 4px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .history-thumb svg { width: 16px; height: 16px; color: var(--text3); }
+  .history-info { flex: 1; min-width: 0; }
+  .history-info p { font-size: 12px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .history-info span { font-size: 10px; color: var(--text3); font-family: 'Space Mono', monospace; }
+  .history-verdict { font-size: 9px; font-family: 'Space Mono', monospace; font-weight: 700; }
+
+  /* Notification modal */
+  .notif-toast {
+    position: fixed; bottom: 20px; right: 20px;
+    background: var(--surface);
+    border: 1px solid var(--accent);
+    border-radius: 6px;
+    padding: 12px 16px;
+    display: flex; align-items: center; gap: 10px;
+    box-shadow: var(--glow);
+    z-index: 500;
+    transform: translateY(100px);
+    opacity: 0;
+    transition: transform 0.3s, opacity 0.3s;
+  }
+  .notif-toast.show { transform: translateY(0); opacity: 1; }
+  .notif-toast svg { width: 16px; height: 16px; color: var(--accent); flex-shrink: 0; }
+  .notif-toast p { font-size: 12px; color: var(--text); font-family: 'Space Mono', monospace; }
+
+  /* Empty states */
+  .empty-state {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    height: 100px; gap: 8px;
+    color: var(--text3);
+  }
+  .empty-state svg { width: 28px; height: 28px; opacity: 0.4; }
+  .empty-state p { font-size: 11px; font-family: 'Space Mono', monospace; opacity: 0.6; }
+
+  /* Scrollbar */
+  * { scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header>
+  <div class="logo-group">
+    <div class="logo-icon">
+      <svg viewBox="0 0 34 34" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect x="1" y="1" width="32" height="32" rx="5" stroke="#00c8ff" stroke-width="1.2"/>
+        <circle cx="17" cy="17" r="8" stroke="#00c8ff" stroke-width="1.2"/>
+        <circle cx="17" cy="17" r="3" fill="#00c8ff" opacity="0.8"/>
+        <line x1="17" y1="1" x2="17" y2="9" stroke="#00ff9d" stroke-width="1.2"/>
+        <line x1="17" y1="25" x2="17" y2="33" stroke="#00ff9d" stroke-width="1.2"/>
+        <line x1="1" y1="17" x2="9" y2="17" stroke="#00ff9d" stroke-width="1.2"/>
+        <line x1="25" y1="17" x2="33" y2="17" stroke="#00ff9d" stroke-width="1.2"/>
+        <path d="M9 9 L12 12" stroke="#00c8ff" stroke-width="1" opacity="0.5"/>
+        <path d="M22 22 L25 25" stroke="#00c8ff" stroke-width="1" opacity="0.5"/>
+        <path d="M25 9 L22 12" stroke="#00c8ff" stroke-width="1" opacity="0.5"/>
+        <path d="M9 25 L12 22" stroke="#00c8ff" stroke-width="1" opacity="0.5"/>
+      </svg>
+    </div>
+    <div class="logo-text">Detect<span>Hack</span></div>
+  </div>
+  <div class="header-right">
+    <div class="badge-live">● SYSTEM ACTIVE</div>
+    <button class="btn-account" id="btnAccount" title="Account">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
+      </svg>
+    </button>
+  </div>
+</header>
+
+<!-- MAIN DASHBOARD -->
+<div class="main">
+
+  <!-- SECTION 1: UPLOAD -->
+  <div class="panel panel-upload">
+    <div class="panel-header">
+      <div class="panel-title"><div class="dot"></div>MEDIA ANALYSIS ENGINE</div>
+      <div class="panel-title" style="font-size:9px; gap:5px;">
+        <div class="dot green"></div>READY
+      </div>
+    </div>
+    <div class="panel-body">
+
+      <!-- Upload Zone -->
+      <div class="upload-zone" id="uploadZone">
+        <input type="file" id="fileInput" accept="image/*,video/*" onchange="handleFile(this)">
+        <div class="upload-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+            <polyline points="17 8 12 3 7 8"/>
+            <line x1="12" y1="3" x2="12" y2="15"/>
+          </svg>
+        </div>
+        <div class="upload-label">
+          <p>Drop or click to upload</p>
+          <span>IMAGES OR VIDEO FILES</span>
+        </div>
+        <div class="file-types">
+          <span class="file-type-tag">MP4</span>
+          <span class="file-type-tag">MOV</span>
+          <span class="file-type-tag">AVI</span>
+          <span class="file-type-tag">JPG</span>
+          <span class="file-type-tag">PNG</span>
+          <span class="file-type-tag">WEBP</span>
+        </div>
+      </div>
+
+      <!-- File Preview -->
+      <div class="preview-area" id="previewArea">
+        <div class="preview-file">
+          <div class="preview-thumb" id="previewThumb">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="20" height="20" rx="2"/><path d="M10 8l6 4-6 4V8z"/></svg>
+          </div>
+          <div class="preview-info">
+            <p id="previewName">filename.mp4</p>
+            <span id="previewMeta">0.0 MB · Ready for analysis</span>
+          </div>
+          <button class="btn-remove" onclick="removeFile()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Progress -->
+      <div class="progress-wrap" id="progressWrap">
+        <div class="progress-label">
+          <span id="progressLabel">INITIALIZING SCAN...</span>
+          <span id="progressPct">0%</span>
+        </div>
+        <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+      </div>
+
+      <!-- Analysis Options -->
+      <div class="analysis-options">
+        <div class="option-title">DETECTION MODULES</div>
+        <div class="options-grid">
+          <div class="option-card active" onclick="toggleOption(this)">
+            <div class="option-check"><svg viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1.5,5 4,7.5 8.5,2"/></svg></div>
+            <div class="option-info">
+              <p>Spatial Analysis</p>
+              <span>FACE + TEXTURE</span>
+            </div>
+          </div>
+          <div class="option-card active" onclick="toggleOption(this)">
+            <div class="option-check"><svg viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1.5,5 4,7.5 8.5,2"/></svg></div>
+            <div class="option-info">
+              <p>Temporal Check</p>
+              <span>FRAME FLOW</span>
+            </div>
+          </div>
+          <div class="option-card active" onclick="toggleOption(this)">
+            <div class="option-check"><svg viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1.5,5 4,7.5 8.5,2"/></svg></div>
+            <div class="option-info">
+              <p>Blink Pattern</p>
+              <span>EYE METRICS</span>
+            </div>
+          </div>
+          <div class="option-card" onclick="toggleOption(this)">
+            <div class="option-check"><svg viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1.5,5 4,7.5 8.5,2"/></svg></div>
+            <div class="option-info">
+              <p>Audio Sync</p>
+              <span>LIP + VOICE</span>
+            </div>
+          </div>
+          <div class="option-card active" onclick="toggleOption(this)">
+            <div class="option-check"><svg viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1.5,5 4,7.5 8.5,2"/></svg></div>
+            <div class="option-info">
+              <p>Metadata Scan</p>
+              <span>EXIF + HASH</span>
+            </div>
+          </div>
+          <div class="option-card" onclick="toggleOption(this)">
+            <div class="option-check"><svg viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1.5,5 4,7.5 8.5,2"/></svg></div>
+            <div class="option-info">
+              <p>GAN Artifacts</p>
+              <span>MODEL TRACES</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <button class="btn-analyze" id="btnAnalyze" onclick="startAnalysis()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          <line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/>
+        </svg>
+        RUN DEEPFAKE SCAN
+      </button>
+
+    </div>
+  </div>
+
+  <!-- SECTION 2: REPORTS -->
+  <div class="panel panel-reports">
+    <div class="panel-header">
+      <div class="panel-title"><div class="dot red"></div>REPORTS INBOX</div>
+      <div class="panel-title" style="font-size:9px;">
+        <span style="font-family:'Space Mono',monospace; color:var(--text3);">3 NEW</span>
+      </div>
+    </div>
+    <div class="panel-body">
+      <div class="report-list" id="reportList">
+
+        <div class="report-card" onclick="openReport('RPT-0041')">
+          <div class="report-verdict verdict-fake"></div>
+          <div class="report-info">
+            <p>interview_clip_final.mp4</p>
+            <span>RPT-0041 · 2 MIN AGO</span>
+          </div>
+          <div class="report-score score-high">97.3%</div>
+          <div class="report-badge badge-fake">FAKE</div>
+        </div>
+
+        <div class="report-card" onclick="openReport('RPT-0040')">
+          <div class="report-verdict verdict-real"></div>
+          <div class="report-info">
+            <p>press_conference_720p.mp4</p>
+            <span>RPT-0040 · 14 MIN AGO</span>
+          </div>
+          <div class="report-score score-low">4.1%</div>
+          <div class="report-badge badge-real">REAL</div>
+        </div>
+
+        <div class="report-card" onclick="openReport('RPT-0039')">
+          <div class="report-verdict verdict-unsure"></div>
+          <div class="report-info">
+            <p>social_post_image.png</p>
+            <span>RPT-0039 · 1 HR AGO</span>
+          </div>
+          <div class="report-score score-mid">61.8%</div>
+          <div class="report-badge badge-unsure">REVIEW</div>
+        </div>
+
+        <div class="report-card" onclick="openReport('RPT-0038')">
+          <div class="report-verdict verdict-fake"></div>
+          <div class="report-info">
+            <p>announcement_video.mov</p>
+            <span>RPT-0038 · 3 HR AGO</span>
+          </div>
+          <div class="report-score score-high">88.6%</div>
+          <div class="report-badge badge-fake">FAKE</div>
+        </div>
+
+        <div class="report-card" onclick="openReport('RPT-0037')">
+          <div class="report-verdict verdict-real"></div>
+          <div class="report-info">
+            <p>id_verification_shot.jpg</p>
+            <span>RPT-0037 · 5 HR AGO</span>
+          </div>
+          <div class="report-score score-low">2.7%</div>
+          <div class="report-badge badge-real">REAL</div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- SECTION 3: ANALYTICS -->
+  <div class="panel panel-analytics">
+    <div class="panel-header">
+      <div class="panel-title"><div class="dot green"></div>ANALYTICS</div>
+    </div>
+    <div class="panel-body">
+
+      <div class="analytics-grid">
+        <div class="stat-card">
+          <div class="stat-num red">247</div>
+          <div class="stat-label">FAKES DETECTED</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-num green">1,083</div>
+          <div class="stat-label">VERIFIED REAL</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-num blue">98.4%</div>
+          <div class="stat-label">ACCURACY</div>
+        </div>
+      </div>
+
+      <div class="chart-wrap">
+        <div class="chart-title">WEEKLY SCAN VOLUME</div>
+        <canvas id="barChart" height="70"></canvas>
+      </div>
+
+      <div class="mini-charts">
+        <div class="mini-chart-wrap">
+          <div class="mini-chart-title">FAKE vs REAL RATIO</div>
+          <canvas id="donutChart" height="90"></canvas>
+        </div>
+        <div class="mini-chart-wrap">
+          <div class="mini-chart-title">CONFIDENCE TREND</div>
+          <canvas id="lineChart" height="90"></canvas>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+
+<!-- ACCOUNT OVERLAY -->
+<div class="account-overlay" id="accountOverlay" onclick="closeAccount(event)">
+  <div class="account-panel" onclick="event.stopPropagation()">
+    <div class="account-header">
+      <div style="display:flex; align-items:center; gap:14px;">
+        <div class="account-avatar">A</div>
+        <div>
+          <div class="account-name">Aryan Mehta</div>
+          <div class="account-email">aryan@detecthack.io</div>
+          <div class="account-plan">PRO ANALYST</div>
+        </div>
+      </div>
+      <button class="btn-close-panel" onclick="closeAccountBtn()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+
+    <!-- Settings -->
+    <div class="account-section">
+      <div class="account-section-title">SETTINGS</div>
+
+      <div class="setting-row">
+        <div class="setting-info">
+          <p>Dark / Light Mode</p>
+          <span>INTERFACE THEME</span>
+        </div>
+        <button class="toggle on" id="themeToggle" onclick="toggleTheme(this)"></button>
+      </div>
+
+      <div class="setting-row">
+        <div class="setting-info">
+          <p>Auto-Generate Reports</p>
+          <span>AFTER EACH SCAN</span>
+        </div>
+        <button class="toggle on" onclick="this.classList.toggle('on')"></button>
+      </div>
+
+      <div class="setting-row">
+        <div class="setting-info">
+          <p>Email Notifications</p>
+          <span>HIGH-RISK ALERTS</span>
+        </div>
+        <button class="toggle" onclick="this.classList.toggle('on')"></button>
+      </div>
+
+      <div class="setting-row">
+        <div class="setting-info">
+          <p>Temporal Analysis</p>
+          <span>VIDEO FRAME SCAN</span>
+        </div>
+        <button class="toggle on" onclick="this.classList.toggle('on')"></button>
+      </div>
+
+      <div class="setting-row">
+        <div class="setting-info">
+          <p>High Sensitivity Mode</p>
+          <span>MORE FALSE POSITIVES</span>
+        </div>
+        <button class="toggle" onclick="this.classList.toggle('on')"></button>
+      </div>
+    </div>
+
+    <!-- Usage -->
+    <div class="account-section">
+      <div class="account-section-title">USAGE THIS MONTH</div>
+      <div style="display:flex; flex-direction:column; gap:10px;">
+        <div>
+          <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
+            <span style="font-size:11px; color:var(--text2);">Scans Used</span>
+            <span style="font-size:11px; font-family:'Space Mono',monospace; color:var(--accent);">247 / 500</span>
+          </div>
+          <div class="progress-bar"><div class="progress-fill" style="width:49.4%; transition:none;"></div></div>
+        </div>
+        <div>
+          <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
+            <span style="font-size:11px; color:var(--text2);">Storage</span>
+            <span style="font-size:11px; font-family:'Space Mono',monospace; color:var(--accent2);">3.2 GB / 10 GB</span>
+          </div>
+          <div class="progress-bar"><div class="progress-fill" style="width:32%; background: linear-gradient(90deg, var(--accent2), var(--accent)); transition:none;"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- History -->
+    <div class="account-section">
+      <div class="account-section-title">RECENT HISTORY</div>
+      <div>
+        <div class="history-item">
+          <div class="history-thumb">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="20" height="20" rx="2"/><path d="M10 8l6 4-6 4V8z"/></svg>
+          </div>
+          <div class="history-info">
+            <p>interview_clip_final.mp4</p>
+            <span>2 MIN AGO · 4:23</span>
+          </div>
+          <div class="history-verdict" style="color:var(--accent3);">FAKE</div>
+        </div>
+        <div class="history-item">
+          <div class="history-thumb">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="20" height="20" rx="2"/><path d="M10 8l6 4-6 4V8z"/></svg>
+          </div>
+          <div class="history-info">
+            <p>press_conference_720p.mp4</p>
+            <span>14 MIN AGO · 12:07</span>
+          </div>
+          <div class="history-verdict" style="color:var(--accent2);">REAL</div>
+        </div>
+        <div class="history-item">
+          <div class="history-thumb">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="20" height="20" rx="2"/><path d="M8 4h8M8 20h8M4 8v8M20 8v8"/></svg>
+          </div>
+          <div class="history-info">
+            <p>social_post_image.png</p>
+            <span>1 HR AGO · IMAGE</span>
+          </div>
+          <div class="history-verdict" style="color:#ffb800;">REVIEW</div>
+        </div>
+        <div class="history-item">
+          <div class="history-thumb">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="20" height="20" rx="2"/><path d="M10 8l6 4-6 4V8z"/></svg>
+          </div>
+          <div class="history-info">
+            <p>announcement_video.mov</p>
+            <span>3 HR AGO · 8:54</span>
+          </div>
+          <div class="history-verdict" style="color:var(--accent3);">FAKE</div>
+        </div>
+        <div class="history-item">
+          <div class="history-thumb">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="20" height="20" rx="2"/><path d="M8 4h8M8 20h8M4 8v8M20 8v8"/></svg>
+          </div>
+          <div class="history-info">
+            <p>id_verification_shot.jpg</p>
+            <span>5 HR AGO · IMAGE</span>
+          </div>
+          <div class="history-verdict" style="color:var(--accent2);">REAL</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="account-section" style="border-bottom:none;">
+      <button style="width:100%; background:rgba(255,60,110,0.1); border:1px solid rgba(255,60,110,0.3); color:var(--accent3); padding:10px; border-radius:5px; font-family:'Syne',sans-serif; font-size:13px; font-weight:700; cursor:pointer; letter-spacing:0.5px;" onclick="showToast('Logged out successfully')">
+        SIGN OUT
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="notif-toast" id="toast">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+  </svg>
+  <p id="toastMsg">Analysis complete</p>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script>
+// Theme
+let isDark = true;
+function toggleTheme(btn) {
+  isDark = !isDark;
+  btn.classList.toggle('on', isDark);
+  document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light');
+  setTimeout(renderCharts, 50);
+}
+
+// Account panel
+document.getElementById('btnAccount').onclick = () => {
+  document.getElementById('accountOverlay').classList.add('show');
+};
+function closeAccount(e) {
+  document.getElementById('accountOverlay').classList.remove('show');
+}
+function closeAccountBtn() {
+  document.getElementById('accountOverlay').classList.remove('show');
+}
+
+// Option cards
+function toggleOption(el) {
+  el.classList.toggle('active');
+}
+
+// Drag & drop
+const uploadZone = document.getElementById('uploadZone');
+uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('drag-over'); });
+uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('drag-over'));
+uploadZone.addEventListener('drop', e => {
+  e.preventDefault();
+  uploadZone.classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file) processFile(file);
+});
+
+function handleFile(input) {
+  if (input.files[0]) processFile(input.files[0]);
+}
+
+function processFile(file) {
+  const area = document.getElementById('previewArea');
+  document.getElementById('previewName').textContent = file.name;
+  document.getElementById('previewMeta').textContent = (file.size / 1048576).toFixed(1) + ' MB · Ready for analysis';
+
+  const thumb = document.getElementById('previewThumb');
+  if (file.type.startsWith('image/')) {
+    const reader = new FileReader();
+    reader.onload = e => { thumb.innerHTML = `<img src="${e.target.result}" alt="">`; };
+    reader.readAsDataURL(file);
+  } else {
+    thumb.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="20" height="20" rx="2"/><path d="M10 8l6 4-6 4V8z"/></svg>`;
+  }
+  area.classList.add('show');
+}
+
+function removeFile() {
+  document.getElementById('previewArea').classList.remove('show');
+  document.getElementById('progressWrap').classList.remove('show');
+  document.getElementById('fileInput').value = '';
+  document.getElementById('btnAnalyze').disabled = false;
+  document.getElementById('btnAnalyze').textContent = '';
+  document.getElementById('btnAnalyze').innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg> RUN DEEPFAKE SCAN`;
+}
+
+// Analysis simulation
+const steps = [
+  [15, 'LOADING MEDIA...'],
+  [30, 'EXTRACTING FRAMES...'],
+  [48, 'SPATIAL ANALYSIS...'],
+  [62, 'TEMPORAL COHERENCE...'],
+  [75, 'BLINK PATTERN CHECK...'],
+  [88, 'METADATA VALIDATION...'],
+  [95, 'COMPUTING CONFIDENCE...'],
+  [100, 'SCAN COMPLETE']
+];
+
+function startAnalysis() {
+  const btn = document.getElementById('btnAnalyze');
+  btn.disabled = true;
+  btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation:spin 1s linear infinite"><path d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" opacity="0.25"/><path d="M12 3a9 9 0 019 9"/></svg> SCANNING...`;
+  const pw = document.getElementById('progressWrap');
+  const fill = document.getElementById('progressFill');
+  const pLabel = document.getElementById('progressLabel');
+  const pPct = document.getElementById('progressPct');
+  pw.classList.add('show');
+
+  let i = 0;
+  const tick = () => {
+    if (i >= steps.length) {
+      btn.disabled = false;
+      btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg> RUN DEEPFAKE SCAN`;
+      showToast('Analysis complete — Report RPT-0042 generated');
+      addReport();
+      return;
+    }
+    const [pct, label] = steps[i];
+    fill.style.width = pct + '%';
+    pLabel.textContent = label;
+    pPct.textContent = pct + '%';
+    i++;
+    setTimeout(tick, 300 + Math.random() * 200);
+  };
+  tick();
+}
+
+function addReport() {
+  const list = document.getElementById('reportList');
+  const card = document.createElement('div');
+  card.className = 'report-card';
+  card.style.animation = 'fadeIn 0.3s ease';
+  const fname = document.getElementById('previewName').textContent || 'new_upload.mp4';
+  card.innerHTML = `
+    <div class="report-verdict verdict-fake"></div>
+    <div class="report-info"><p>${fname}</p><span>RPT-0042 · JUST NOW</span></div>
+    <div class="report-score score-high">91.2%</div>
+    <div class="report-badge badge-fake">FAKE</div>`;
+  list.insertBefore(card, list.firstChild);
+}
+
+function openReport(id) {
+  showToast('Opening report ' + id + '...');
+}
+
+// Toast
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  document.getElementById('toastMsg').textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+// Charts
+function getCSSVar(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+
+let barChartInst, donutChartInst, lineChartInst;
+
+function renderCharts() {
+  const accent = getCSSVar('--accent');
+  const accent2 = getCSSVar('--accent2');
+  const accent3 = getCSSVar('--accent3');
+  const border = getCSSVar('--border');
+  const text3 = getCSSVar('--text3');
+  const bg2 = getCSSVar('--bg2');
+
+  if (barChartInst) barChartInst.destroy();
+  if (donutChartInst) donutChartInst.destroy();
+  if (lineChartInst) lineChartInst.destroy();
+
+  Chart.defaults.color = text3;
+  Chart.defaults.font.family = "'Space Mono', monospace";
+  Chart.defaults.font.size = 9;
+
+  // Bar chart
+  barChartInst = new Chart(document.getElementById('barChart'), {
+    type: 'bar',
+    data: {
+      labels: ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'],
+      datasets: [
+        { label: 'FAKE', data: [12, 19, 9, 27, 14, 8, 23], backgroundColor: accent3 + '99', borderColor: accent3, borderWidth: 1 },
+        { label: 'REAL', data: [31, 45, 28, 52, 38, 19, 41], backgroundColor: accent2 + '55', borderColor: accent2, borderWidth: 1 }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: true,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { color: border + '44' }, ticks: { color: text3 } },
+        y: { grid: { color: border + '44' }, ticks: { color: text3, maxTicksLimit: 4 } }
+      },
+      animation: { duration: 800 }
+    }
+  });
+
+  // Donut
+  donutChartInst = new Chart(document.getElementById('donutChart'), {
+    type: 'doughnut',
+    data: {
+      labels: ['FAKE', 'REAL', 'REVIEW'],
+      datasets: [{ data: [247, 1083, 58], backgroundColor: [accent3 + 'cc', accent2 + 'cc', '#ffb800cc'], borderColor: bg2, borderWidth: 2 }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: true,
+      plugins: { legend: { position: 'bottom', labels: { boxWidth: 8, padding: 6, font: { size: 8 } } } },
+      cutout: '65%',
+      animation: { duration: 800 }
+    }
+  });
+
+  // Line chart
+  lineChartInst = new Chart(document.getElementById('lineChart'), {
+    type: 'line',
+    data: {
+      labels: ['W1', 'W2', 'W3', 'W4', 'W5', 'W6'],
+      datasets: [{
+        label: 'AVG CONFIDENCE',
+        data: [94, 96, 95, 98, 97, 98.4],
+        borderColor: accent,
+        backgroundColor: accent + '22',
+        fill: true,
+        tension: 0.4,
+        pointBackgroundColor: accent,
+        pointRadius: 3,
+        borderWidth: 1.5
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: true,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { color: border + '44' }, ticks: { color: text3 } },
+        y: { grid: { color: border + '44' }, ticks: { color: text3, maxTicksLimit: 4 }, min: 90, max: 100 }
+      },
+      animation: { duration: 800 }
+    }
+  });
+}
+
+// Spin animation
+const style = document.createElement('style');
+style.textContent = '@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }';
+document.head.appendChild(style);
+
+renderCharts();
+</script>
+</body>
+</html>
