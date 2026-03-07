@@ -18,7 +18,7 @@ uploadForm.addEventListener("submit", async function (e) {
     resultDiv.innerHTML = "Analyzing...";
 
     try {
-        const response = await fetch("https://detecthack-api.onrender.com/analyze", {
+        const response = await fetch("https://detecthack.onrender.com/analyze", {
             method: "POST",
             body: formData
         });
